@@ -9,23 +9,32 @@ export interface ThreadPatch {
 }
 
 const DIR = '.refiner';
-const FILE = 'comments.json';
+/** Threads on lines of code. */
+export const CODE_FILE = 'comments.json';
+/** Threads on elements of a running web app (see `types.ts`). */
+export const WEB_FILE = 'web-comments.json';
 
 /**
- * Owns `.refiner/comments.json`: reads it, writes it, and watches it for external
- * changes (e.g. Claude Code replying). Fires `onDidChange` whenever the in-memory
+ * Owns one store file under `.refiner/` (`comments.json` or `web-comments.json`):
+ * reads it, writes it, and watches it for external changes (e.g. Claude Code
+ * replying, or the browser overlay). Fires `onDidChange` whenever the in-memory
  * data changes, so the UI layer can reconcile.
  */
 export class RefinerStore implements vscode.Disposable {
   private data: StoreData = { version: 1, threads: [] };
   private lastWritten = '';
   private seq = 0;
+  /** Serializes writes: two overlapping ones could land the older text last. */
+  private writeChain: Promise<void> = Promise.resolve();
   private readonly watcher: vscode.FileSystemWatcher;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
 
-  constructor(private readonly folder: vscode.WorkspaceFolder) {
-    const pattern = new vscode.RelativePattern(folder, `${DIR}/${FILE}`);
+  constructor(
+    private readonly folder: vscode.WorkspaceFolder,
+    readonly file: string = CODE_FILE,
+  ) {
+    const pattern = new vscode.RelativePattern(folder, `${DIR}/${file}`);
     this.watcher = vscode.workspace.createFileSystemWatcher(pattern);
     this.watcher.onDidChange(() => void this.reload());
     this.watcher.onDidCreate(() => void this.reload());
@@ -37,7 +46,7 @@ export class RefinerStore implements vscode.Disposable {
   }
 
   get uri(): vscode.Uri {
-    return vscode.Uri.joinPath(this.folder.uri, DIR, FILE);
+    return vscode.Uri.joinPath(this.folder.uri, DIR, this.file);
   }
 
   get threads(): StoredThread[] {
@@ -72,24 +81,31 @@ export class RefinerStore implements vscode.Disposable {
     }
     try {
       const obj = JSON.parse(text) as Partial<StoreData>;
+      // Keep whatever else another client put at the root: the file is shared.
       this.data = {
+        ...obj,
         version: obj.version ?? 1,
         threads: Array.isArray(obj.threads) ? (obj.threads as StoredThread[]) : [],
       };
       this.lastWritten = text;
     } catch (err) {
-      vscode.window.showErrorMessage(`Refiner: could not parse ${DIR}/${FILE}: ${err}`);
+      vscode.window.showErrorMessage(`Refiner: could not parse ${DIR}/${this.file}: ${err}`);
       return;
     }
     this._onDidChange.fire();
   }
 
-  private async persist(): Promise<void> {
+  private persist(): Promise<void> {
     const text = JSON.stringify(this.data, null, 2) + '\n';
     this.lastWritten = text;
-    await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(this.folder.uri, DIR));
-    await vscode.workspace.fs.writeFile(this.uri, Buffer.from(text, 'utf8'));
-    this._onDidChange.fire();
+    const write = this.writeChain.then(async () => {
+      await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(this.folder.uri, DIR));
+      await vscode.workspace.fs.writeFile(this.uri, Buffer.from(text, 'utf8'));
+      this._onDidChange.fire();
+    });
+    // A failed write must not jam the queue for the next one.
+    this.writeChain = write.catch(() => undefined);
+    return write;
   }
 
   async addThread(thread: StoredThread): Promise<void> {
