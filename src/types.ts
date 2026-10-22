@@ -1,7 +1,8 @@
 /**
- * The on-disk data model for Refiner. This file (`.refiner/comments.json`) is the
- * contract shared between the VSCode extension and Claude Code — keep it simple and
- * human-readable so it can be edited by either side.
+ * The on-disk data model for Refiner. `.refiner/comments.json` (code threads) and
+ * `.refiner/web-comments.json` (UI threads) share it; both are the contract between
+ * the VSCode extension, the refiner TUI and Claude Code — keep it simple and
+ * human-readable so it can be edited by any side.
  *
  * Line numbers are 1-based (matching the editor gutter) to stay friendly for humans
  * and for Claude Code reading the file.
@@ -51,4 +52,62 @@ export interface StoredThread {
 export interface StoreData {
   version: number;
   threads: StoredThread[];
+}
+
+// ---- UI threads (`.refiner/web-comments.json`) ---------------------------------
+//
+// Threads pinned to elements of a running web app live in a SEPARATE file with the
+// same shape, shared with the refiner TUI's `refiner web` and the browser overlay.
+// In it `file` is the page (a route with ids collapsed, e.g. `/users/:id/edit`),
+// `range` is a `1–1` placeholder, and the real target is `web`.
+
+/**
+ * What the browser overlay records about an element. It is resolved again on
+ * every page load (test id, id, text, classes, CSS path… vote for a candidate),
+ * never rewritten — a corrected guess would only drift further next time.
+ */
+export interface WebAnchor {
+  tag: string;
+  id: string;
+  testid: string;
+  role: string;
+  name: string;
+  text: string;
+  classes: string[];
+  css: string;
+  path: string;
+  /** Document coordinates at capture time. */
+  rect: { x: number; y: number; w: number; h: number };
+  /** Where inside the element the reviewer clicked, as fractions. The pin goes there. */
+  at: { fx: number; fy: number };
+}
+
+/** Where the element comes from, as far as the framework's dev-mode internals say. */
+export interface WebSource {
+  framework?: string;
+  component?: string;
+  /** Repo-relative path. */
+  file?: string;
+  line?: number;
+  /** Angular: the component's external template as `path:line`, when it has one. */
+  template?: string;
+}
+
+/** The `web` field of a UI thread. */
+export interface WebTarget {
+  url: string;
+  page: string;
+  title: string;
+  viewport: { w: number; h: number };
+  anchor: WebAnchor;
+  source?: WebSource;
+  /** Repo-relative PNG of the element as the reviewer saw it. */
+  shot?: string;
+}
+
+export type WebThread = StoredThread & { web: WebTarget };
+
+export function isWebThread(t: StoredThread): t is WebThread {
+  const w = (t as { web?: unknown }).web;
+  return typeof w === 'object' && w !== null && typeof (w as WebTarget).page === 'string';
 }

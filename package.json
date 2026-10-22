@@ -1,7 +1,7 @@
 {
   "name": "refiner",
   "displayName": "Refiner",
-  "description": "Inline comment threads (annotations) that Claude Code can read and reply to.",
+  "description": "Inline comment threads (annotations) on code and on the running UI that Claude Code can read and reply to.",
   "version": "0.0.1",
   "publisher": "refiner-dev",
   "license": "MIT",
@@ -27,6 +27,11 @@
           "type": "string",
           "default": "",
           "description": "Name used as the author of comments you create. Defaults to your OS username."
+        },
+        "refiner.chromePath": {
+          "type": "string",
+          "default": "",
+          "description": "Browser binary for 'Review UI in Browser' (Chrome, Chromium, Brave or Edge). Empty = auto-detect; the REFINER_CHROME environment variable is honored too."
         }
       }
     },
@@ -78,7 +83,8 @@
       {
         "command": "refiner.refresh",
         "title": "Reload Comments",
-        "category": "Refiner"
+        "category": "Refiner",
+        "icon": "$(refresh)"
       },
       {
         "command": "refiner.reanchor",
@@ -89,6 +95,88 @@
         "command": "refiner.installSkills",
         "title": "Install Claude Code Skills",
         "category": "Refiner"
+      },
+      {
+        "command": "refiner.openWeb",
+        "title": "Review UI in Browser…",
+        "category": "Refiner",
+        "icon": "$(browser)"
+      },
+      {
+        "command": "refiner.stopWeb",
+        "title": "Stop Browser Review Session",
+        "category": "Refiner",
+        "icon": "$(debug-stop)",
+        "enablement": "refiner.webSession"
+      },
+      {
+        "command": "refiner.webSessionMenu",
+        "title": "Browser Review Session…",
+        "category": "Refiner"
+      },
+      {
+        "command": "refiner.ui.open",
+        "title": "Open"
+      },
+      {
+        "command": "refiner.ui.openSource",
+        "title": "Go to Source",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "refiner.ui.showInBrowser",
+        "title": "Show in Browser",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "refiner.ui.openShot",
+        "title": "Open Screenshot",
+        "icon": "$(file-media)"
+      },
+      {
+        "command": "refiner.ui.reply",
+        "title": "Reply…",
+        "icon": "$(reply)"
+      },
+      {
+        "command": "refiner.ui.resolve",
+        "title": "Resolve",
+        "icon": "$(check)"
+      },
+      {
+        "command": "refiner.ui.reopen",
+        "title": "Reopen",
+        "icon": "$(comment-unresolved)"
+      },
+      {
+        "command": "refiner.ui.delete",
+        "title": "Delete Thread",
+        "icon": "$(trash)"
+      }
+    ],
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "refiner",
+          "title": "Refiner",
+          "icon": "media/refiner.svg"
+        }
+      ]
+    },
+    "views": {
+      "refiner": [
+        {
+          "id": "refiner.uiThreads",
+          "name": "UI Threads",
+          "icon": "$(browser)",
+          "contextualTitle": "Refiner"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "refiner.uiThreads",
+        "contents": "No UI threads yet.\n[Review UI in Browser…](command:refiner.openWeb)\nChrome opens on your running app with the review overlay: press C and click any element to leave a thread. Threads land in .refiner/web-comments.json, and /refine-resolve works through them."
       }
     ],
     "menus": {
@@ -101,7 +189,90 @@
         { "command": "refiner.editComment", "when": "false" },
         { "command": "refiner.deleteComment", "when": "false" },
         { "command": "refiner.saveComment", "when": "false" },
-        { "command": "refiner.cancelEdit", "when": "false" }
+        { "command": "refiner.cancelEdit", "when": "false" },
+        { "command": "refiner.webSessionMenu", "when": "refiner.webSession" },
+        { "command": "refiner.ui.open", "when": "false" },
+        { "command": "refiner.ui.openSource", "when": "false" },
+        { "command": "refiner.ui.showInBrowser", "when": "false" },
+        { "command": "refiner.ui.openShot", "when": "false" },
+        { "command": "refiner.ui.reply", "when": "false" },
+        { "command": "refiner.ui.resolve", "when": "false" },
+        { "command": "refiner.ui.reopen", "when": "false" },
+        { "command": "refiner.ui.delete", "when": "false" }
+      ],
+      "view/title": [
+        {
+          "command": "refiner.openWeb",
+          "group": "navigation@1",
+          "when": "view == refiner.uiThreads && !refiner.webSession"
+        },
+        {
+          "command": "refiner.stopWeb",
+          "group": "navigation@1",
+          "when": "view == refiner.uiThreads && refiner.webSession"
+        },
+        {
+          "command": "refiner.refresh",
+          "group": "navigation@2",
+          "when": "view == refiner.uiThreads"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "refiner.ui.openSource",
+          "group": "inline@1",
+          "when": "view == refiner.uiThreads && viewItem =~ /^thread-.*-source$/"
+        },
+        {
+          "command": "refiner.ui.showInBrowser",
+          "group": "inline@2",
+          "when": "view == refiner.uiThreads && viewItem =~ /^thread-/"
+        },
+        {
+          "command": "refiner.ui.resolve",
+          "group": "inline@3",
+          "when": "view == refiner.uiThreads && viewItem =~ /^thread-open/"
+        },
+        {
+          "command": "refiner.ui.reopen",
+          "group": "inline@3",
+          "when": "view == refiner.uiThreads && viewItem =~ /^thread-resolved/"
+        },
+        {
+          "command": "refiner.ui.reply",
+          "group": "1_act@1",
+          "when": "view == refiner.uiThreads && viewItem =~ /^thread-open/"
+        },
+        {
+          "command": "refiner.ui.openSource",
+          "group": "2_nav@1",
+          "when": "view == refiner.uiThreads && viewItem =~ /^thread-.*-source$/"
+        },
+        {
+          "command": "refiner.ui.showInBrowser",
+          "group": "2_nav@2",
+          "when": "view == refiner.uiThreads && viewItem =~ /^thread-/"
+        },
+        {
+          "command": "refiner.ui.openShot",
+          "group": "2_nav@3",
+          "when": "view == refiner.uiThreads && viewItem =~ /^thread-/"
+        },
+        {
+          "command": "refiner.ui.resolve",
+          "group": "3_status@1",
+          "when": "view == refiner.uiThreads && viewItem =~ /^thread-open/"
+        },
+        {
+          "command": "refiner.ui.reopen",
+          "group": "3_status@1",
+          "when": "view == refiner.uiThreads && viewItem =~ /^thread-resolved/"
+        },
+        {
+          "command": "refiner.ui.delete",
+          "group": "4_danger@1",
+          "when": "view == refiner.uiThreads && viewItem =~ /^thread-/"
+        }
       ],
       "comments/commentThread/context": [
         {
@@ -162,6 +333,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test test/*.test.js",
     "package": "vsce package"
   },
   "devDependencies": {
